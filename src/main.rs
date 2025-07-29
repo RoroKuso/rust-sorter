@@ -22,6 +22,20 @@ fn insertion_sort<T: PartialOrd + PartialEq>(slice: &mut [T]) {
     }
 }
 
+#[allow(unused)]
+fn bubble_sort<T: PartialOrd + PartialEq>(slice: &mut [T]) {
+    for i in 0..slice.len() {
+        let mut flag = false;
+        for j in 1..(slice.len()-i) {
+            if slice[j-1] > slice[j] {
+                flag = true;
+                slice.swap(j-1, j);
+            }
+        }
+        if !flag { break; }
+    }
+}
+
 fn main() {
     println!("Hello, world!");
 }
@@ -56,6 +70,11 @@ mod tests {
             TestQuery {
                 input: TestData::VecI64(vec![1, 6, 3, 2]),
                 answer: TestData::VecI64(vec![1, 2, 3, 6]),
+                qtype: QueryType::CheckEqual,
+            },
+            TestQuery {
+                input: TestData::VecI64(vec![3, 3, 1, 3]),
+                answer: TestData::VecI64(vec![1, 3, 3, 3]),
                 qtype: QueryType::CheckEqual,
             },
             TestQuery {
@@ -105,10 +124,17 @@ mod tests {
         }
     }
 
-     #[test]
+    #[test]
     fn test_insertion_sort() {
         for query in generate_queries() {
            test_sort_variant!(insertion_sort, query.input, query.answer, query.qtype);
+        }
+    }
+
+    #[test]
+    fn test_bubble_sort() {
+        for query in generate_queries() {
+           test_sort_variant!(bubble_sort, query.input, query.answer, query.qtype);
         }
     }
 }
