@@ -1,6 +1,7 @@
 #![allow(unused)]
 
-use std::mem::swap;
+use std::{default, io::copy, mem::swap};
+use std::fmt::Debug;
 
 fn selection_sort<T: PartialOrd + PartialEq>(slice: &mut [T]) {
     for i in 0..slice.len() {
@@ -76,8 +77,35 @@ fn quick_sort<T: PartialOrd + PartialEq>(slice: &mut [T], pivot: fn(&[T]) -> usi
     }
 }
 
-fn merge_sort<T: PartialOrd + PartialEq>(slice: &mut [T]) {
-    
+fn merge_sort<T: PartialOrd + PartialEq + Clone + Debug>(slice: &mut [T]) {
+    if slice.len() == 2 {
+        if slice[0] > slice[1] { slice.swap(0, 1); }
+    } else if slice.len() > 2 {
+        let mid: usize = slice.len() / 2;
+        merge_sort(&mut slice[0..mid]);
+        merge_sort(&mut slice[mid..]);
+        let mut i: usize = 0;
+        let mut j: usize = 0;
+        let left = slice[0..mid].to_vec().clone();
+        let right = slice[mid..].to_vec().clone();
+        while i < left.len() && j < right.len() {
+            if left[i] > right[j] {
+                slice[i+j] = right[j].clone();
+                j += 1;
+            } else {
+                slice[i+j] = left[i].clone();
+                i += 1;
+            }
+        }
+        while i < left.len() {
+            slice[i+j] = left[i].clone();
+            i += 1;
+        }
+        while j < right.len() {
+            slice[i+j] = right[j].clone();
+            j += 1;
+        }
+    }
 }
 
 fn main() {
@@ -88,7 +116,7 @@ fn main() {
 pub mod tests {
     use super::*;
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     enum TestData {
         VecI64(Vec<i64>),
         VecF64(Vec<f64>),
@@ -185,6 +213,13 @@ pub mod tests {
         for query in generate_queries() {
             fn custom_quick_sort<T: PartialOrd + PartialEq>(slice: &mut [T]) { quick_sort(slice, simple_pivot); }
             test_sort_variant!(custom_quick_sort, query.input, query.answer, query.qtype);
+        }
+    }
+
+    #[test]
+    fn test_merge_sort() {
+        for query in generate_queries() {
+           test_sort_variant!(merge_sort, query.input, query.answer, query.qtype);
         }
     }
 }
