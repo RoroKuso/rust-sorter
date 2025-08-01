@@ -1,7 +1,7 @@
 #![allow(unused)]
 
-use std::{default, io::copy, mem::swap};
-use std::fmt::Debug;
+use std::{default, io::copy, mem::swap, fmt::{Debug, Error}};
+use rand::Rng;
 
 fn selection_sort<T: PartialOrd + PartialEq>(slice: &mut [T]) {
     for i in 0..slice.len() {
@@ -38,43 +38,54 @@ fn bubble_sort<T: PartialOrd + PartialEq>(slice: &mut [T]) {
     }
 }
 
-fn simple_pivot<T: PartialOrd + PartialEq>(slice: &[T]) -> usize {
-    (slice.len() + 1) / 2
+fn partition_lomuto<T: PartialOrd + PartialEq>(slice: &mut [T]) -> Result<(usize, usize), Error> {
+    let mut i: usize = 0;
+    for j in 0..slice.len()-1 {
+        if slice[j] <= *slice.last().ok_or(Error)? {
+            slice.swap(i, j);
+            i += 1;
+        }
+    }
+    slice.swap(i, slice.len()-1);
+    Ok((i, i+1))
 }
 
-fn quick_sort<T: PartialOrd + PartialEq>(slice: &mut [T], pivot: fn(&[T]) -> usize) {
+fn partition_hoare<T: PartialOrd + PartialEq + Clone>(slice: &mut [T]) -> Result<(usize, usize), Error> {
+    let n: usize = slice.len();
+    if n <= 2 { return Err(Error); }
+    let mut i = 0;
+    let mut j = n;
+    let p: usize = rand::rng().random_range(0..n);
+    let pivot = slice[p].clone();
+    loop {
+        loop {
+            i += 1;
+            if !(slice[i-1] < pivot) { break; }
+        }
+        loop {
+            j -= 1;
+            if !(slice[j] > pivot) { break; }
+        }
+        if (i-1) >= j { break; }
+        slice.swap(i-1, j);
+    }
+    Ok((j+1, j+1))
+}
+
+
+fn quick_sort<T: PartialOrd + PartialEq>(slice: &mut [T], partition_f: fn(&mut [T]) -> Result<(usize, usize), Error>) -> Result<(), Error> {
     if slice.len() == 2 {
         if slice[0] > slice[1] {slice.swap(0, 1);}
     } else if slice.len() > 2 {
         let n = slice.len();
-        let p_i = pivot(slice);
-        let nb_less = slice.iter()
-            .filter(|x| **x <= slice[p_i])
-            .count();
-        slice.swap(p_i, nb_less-1);
-        let mut pos_x: Vec<usize> = Vec::new();
-        let mut pos_y: Vec<usize> = Vec::new();
-        for i in 0..p_i {
-            if slice[i] > slice[p_i] {
-                pos_y.push(i);
-            }
-        }
-        for i in (p_i+1)..n {
-            if slice[i] <= slice[p_i] {
-                pos_x.push(i);
-            }
-        }
-        pos_x.reverse();
-        pos_y.reverse();
-
-        let mut it = pos_x.iter()
-            .zip(pos_y.iter())
-            .for_each(|(x, y)| slice.swap(*x, *y));
-
-        quick_sort(&mut slice[0..p_i], pivot);
-        quick_sort(&mut slice[(p_i+1)..n], pivot);
-        
+        let (i, j) = match partition_f(slice) {
+            Ok((a, b)) => (a, b),
+            Err(e) => return Err(e),
+        };
+        quick_sort(&mut slice[0..i], partition_f)?;
+        quick_sort(&mut slice[j..n], partition_f)?;
     }
+    Ok(())
 }
 
 fn merge_sort<T: PartialOrd + PartialEq + Clone + Debug>(slice: &mut [T]) {
@@ -105,6 +116,37 @@ fn merge_sort<T: PartialOrd + PartialEq + Clone + Debug>(slice: &mut [T]) {
             slice[i+j] = right[j].clone();
             j += 1;
         }
+    }
+}
+
+
+fn make_heap<T: PartialOrd + PartialEq>(slice: &mut [T], n: usize, i: usize) {
+    let mut curr: usize = i;
+    let left: usize = 2 * i + 1;
+    let right: usize = 2 * i + 2;
+
+    if left < n && slice[left] > slice[curr] {
+        curr = left;
+    }
+    if right < n && slice[right] > slice[curr] {
+        curr = right;
+    }
+    if curr != i {
+        slice.swap(i, curr);
+        make_heap(slice, n, curr);
+    }
+}
+
+fn heap_sort<T: PartialOrd + PartialEq>(slice: &mut [T]) {
+    let n: usize = slice.len();
+    let start: usize = (n/2) - 1;
+    for i in (0..=start).rev() {
+        make_heap(slice, n, i);
+    }
+
+    for i in (1..n).rev() {
+        slice.swap(0, i);
+        make_heap(slice, i, 0);
     }
 }
 
@@ -145,6 +187,11 @@ pub mod tests {
             TestQuery {
                 input: TestData::VecI64(vec![3, 3, 1, 3]),
                 answer: TestData::VecI64(vec![1, 3, 3, 3]),
+                qtype: QueryType::CheckEqual,
+            },
+            TestQuery {
+                input: TestData::VecI64(vec![7, 6, 7, 6, 1, 2, 3, 4, 3, 2, 1, 99, 98]),
+                answer: TestData::VecI64(vec![1, 1, 2, 2, 3, 3, 4, 6, 6, 7, 7, 98, 99]),
                 qtype: QueryType::CheckEqual,
             },
             TestQuery {
@@ -209,9 +256,21 @@ pub mod tests {
     }
 
     #[test]
-    fn test_quick_sort_1() {
+    fn test_quick_sort_lomuto() {
         for query in generate_queries() {
-            fn custom_quick_sort<T: PartialOrd + PartialEq>(slice: &mut [T]) { quick_sort(slice, simple_pivot); }
+            fn custom_quick_sort<T: PartialOrd + PartialEq>(slice: &mut [T]) { 
+                let _ = quick_sort(slice, partition_lomuto); 
+            }
+            test_sort_variant!(custom_quick_sort, query.input, query.answer, query.qtype);
+        }
+    }
+
+    #[test]
+    fn test_quick_sort_hoare() {
+        for query in generate_queries() {
+            fn custom_quick_sort<T: PartialOrd + PartialEq + Clone>(slice: &mut [T]) { 
+                let _ = quick_sort(slice, partition_hoare); 
+            }
             test_sort_variant!(custom_quick_sort, query.input, query.answer, query.qtype);
         }
     }
@@ -220,6 +279,13 @@ pub mod tests {
     fn test_merge_sort() {
         for query in generate_queries() {
            test_sort_variant!(merge_sort, query.input, query.answer, query.qtype);
+        }
+    }
+
+    #[test]
+    fn test_heap_sort() {
+        for query in generate_queries() {
+           test_sort_variant!(heap_sort, query.input, query.answer, query.qtype);
         }
     }
 }
